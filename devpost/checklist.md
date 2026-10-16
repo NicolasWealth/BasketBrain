@@ -1,21 +1,21 @@
 ---
 doc: checklist
-status: draft
+status: approved
 ---
 
 # Build Checklist
 
-Build mode: [learn or fast — choose after this plan is approved]
+Build mode: fast
 
 ## Slices
 
-- [ ] **1. Basket arithmetic produces correct totals and accepted savings**
+- [x] **1. Basket arithmetic produces correct totals and accepted savings**
   Becomes usable: The project has a tested basket domain that validates money, computes totals from item state, enforces the 30-item limit, and applies accepted recommendations correctly.
   Why now: This is the financial foundation for every catalogue, recommendation, API, and screen behavior.
   PRD ref: `prd.md > Features and Behavior > Item Entry`, `prd.md > Features and Behavior > Live Budget Summary`
   Spec ref: `spec.md > Financial Arithmetic (lib/basket.ts)`, `spec.md > Data Model`
   Build: Bootstrap the specified Next.js and Jest project only as needed for this slice; implement `src/lib/basket.ts` and `src/__tests__/basket.test.ts`.
-  Verify (mechanical): Run `npm test -- basket.test.ts`.
+  Verify (mechanical): Passed `node .\node_modules\jest\bin\jest.js src/__tests__/basket.test.ts --runInBand --detectOpenHandles` — 1 suite, 42 tests.
   Learner check: Review an example basket total and confirm that accepting a cheaper substitution reduces it by the specified saving.
   Commit: `Add basket arithmetic`
 

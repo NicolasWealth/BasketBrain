@@ -127,7 +127,7 @@ Currency selector is exactly GBP, USD, EUR, and NGN; budget uses the shared stri
 PRD ref: `prd.md > Budget Setup`, `prd.md > Sample Basket`.
 
 ### `BasketPage` (`app/basket/page.tsx`)
-Root component for the basket workspace. Reads and updates session state through `SessionProvider`: budget, currency, items, request revision, recommendations, rejection IDs, savings baseline, and accumulated savings. Computes totals from derived lines on every render. The reducer is the sole path for manual edits, recommendation acceptance, rejection, and response receipt; it redirects to setup if no session exists.
+Root component for the basket workspace. Reads and updates session state through `SessionProvider`: budget, currency, items, request revision, recommendations, rejection IDs, and accumulated savings. Computes totals from derived lines on every render. The reducer is the sole path for manual edits, recommendation acceptance, rejection, and response receipt; it redirects to setup if no session exists.
 PRD ref: `prd.md > Screens and Layout > Screen 2`.
 
 ### `BudgetSummary` (`components/BudgetSummary.tsx`)
@@ -354,13 +354,34 @@ After every accepted or manual change, the component increments `basketRevision`
 
 This replaces the former greedy `canReachBudget()` claim. It is deterministic and does not rely on an AI assertion.
 
+```typescript
+interface EvaluatedCandidate {
+  candidate: ServerBuiltCandidate;
+  proposedItems: BasketItem[];
+  savingMinor: number;
+}
+
+type BudgetPlan = EvaluatedCandidate[];
+
+type BudgetSearchResult =
+  | { status: 'already-within-budget' }
+  | { status: 'solution-found'; solution: BudgetPlan; leastDisruptive: 'confirmed' }
+  | { status: 'no-solution-among-evaluated-candidates' }
+  | {
+      status: 'search-limit-reached';
+      solution: BudgetPlan;
+      leastDisruptive: 'may-not-be-least-disruptive';
+    };
+```
+
 The search input is exactly the visible recommendation cards that are pending, not rejected, and `valid` after revalidation. Every server-built candidate becomes one visible, actionable card; the provider only enriches it with text or the fallback text. Candidates never conflict: each affects one item only, and a plan contains at most one candidate per item.
 
 Algorithm:
-1. Group displayed candidates by target item. For exact existence, choose the cheapest valid option per item (including no change) and sum those independent choices with all unchanged items.
-2. If that exact minimum total exceeds `budgetMinor`, return `{ status: 'no-solution-among-evaluated-candidates' }`. This says nothing about unevaluated real-world options.
-3. If it fits, enumerate plans only to select the least disruptive qualifying plan: enumerate all one-change plans, then all two-change plans, and so on. Within a size, sort by `basketItemId`, then `candidateId`; the no-change option is first in each item’s option order. Stop at `MAX_COMBINATIONS = 2,000`.
-4. Stop at the first fully completed size containing a valid plan; it is the fewest-changes plan, with the lowest ID order as tie-breaker. If the limit is reached before a size completes, return `{ status: 'search-limit-reached', solution: cheapestPerItemPlan, leastDisruptive: 'may-not-be-least-disruptive' }`. Exact existence remains known.
+1. Calculate the current basket total. If it is `≤ budgetMinor`, skip candidate search and return `{ status: 'already-within-budget' }`; the UI shows the ordinary success state.
+2. Otherwise, group displayed candidates by target item. For exact existence, choose the cheapest valid option per item (including no change) and sum those independent choices with all unchanged items.
+3. If that exact minimum total exceeds `budgetMinor`, return `{ status: 'no-solution-among-evaluated-candidates' }`. This says nothing about unevaluated real-world options.
+4. If it fits, enumerate plans only to select the least disruptive qualifying plan: enumerate all one-change plans, then all two-change plans, and so on. Within a size, sort by `basketItemId`, then `candidateId`; the no-change option is first in each item’s option order. Stop at `MAX_COMBINATIONS = 2,000`.
+5. Stop at the first fully completed size containing a valid plan; it is the fewest-changes plan, with the lowest ID order as tie-breaker. Return it as `{ status: 'solution-found', solution, leastDisruptive: 'confirmed' }`. If the limit is reached before a size completes, return `{ status: 'search-limit-reached', solution: cheapestPerItemPlan, leastDisruptive: 'may-not-be-least-disruptive' }`. Exact existence remains known.
 
 The limits are `MAX_ELIGIBLE_ITEMS = 6`, `MAX_CANDIDATES_PER_ITEM = 3`, and `MAX_COMBINATIONS = 2,000`. A found combination is a reviewable plan, never a batch action. `no-solution-among-evaluated-candidates` never claims global infeasibility; `search-limit-reached` means only plan selection was incomplete after exact existence succeeded. Both statuses appear below the recommendation cards with the current shortfall. Provider failure never removes valid cards or changes budget-search status.
 
@@ -425,7 +446,6 @@ interface RecommendationErrorResponse {
   retryable: boolean;
   requestId?: string;
   basketRevision?: number;
-  fallbackCandidateIds?: string[]; // present for provider/model failures; client renders these with fixed text
 }
 ```
 
@@ -434,10 +454,10 @@ interface RecommendationErrorResponse {
 1. Declare `export const runtime = 'nodejs'`; accept JSON bodies no larger than 32 KiB and at most 30 items. If more than six items are eligible, derive candidates only for the deterministic top six; do not return 400 for that condition.
 2. Parse and validate the complete schema: UUID uniqueness, text lengths, enum values, current supported currency, positive safe-integer budget/price/quantity bounds, match fields, and session-currency consistency. Return 400 on invalid input.
 3. Load the server's static catalogue; derive eligible items and candidate IDs solely from it. Reject missing/invalid catalogue IDs, package signatures, and any client state that purports to be confirmed but cannot be verified.
-4. Check `process.env.OPENAI_API_KEY` and cached model verification. A missing key, rejected key, unavailable model, or unverified model returns 503 `{ code: 'model_unavailable', error: 'AI explanations are unavailable', retryable: true, fallbackCandidateIds }`.
+4. Check `process.env.OPENAI_API_KEY` and cached model verification. A missing key, rejected key, unavailable model, or unverified model returns 503 `{ code: 'model_unavailable', error: 'AI explanations are unavailable', retryable: true }`.
 5. Apply basic public-deployment rate limiting per IP (10 requests per 10 minutes); return 429 retryable when exceeded. The local demo may use the same in-memory limiter.
 6. Build the prompt from server-allowlisted candidate IDs only. Cap prompt text, model output at 1,200 tokens, and request duration at 15 seconds using an abort signal. Call the Responses API with Structured Outputs (`text.format` JSON Schema).
-7. Require a complete, non-refused, schema-valid provider response. Malformed, refused, incomplete, timed-out, or empty model output returns 502 `{ code: 'provider_failed', error: 'AI explanations are unavailable', retryable: true, fallbackCandidateIds }`. In both 502 and 503 cases, return server-built candidate IDs; the client renders the matching cards with fixed fallback text so valid cards remain visible and actionable.
+7. Require a complete, non-refused, schema-valid provider response. Malformed, refused, incomplete, timed-out, or empty model output returns 502 `{ code: 'provider_failed', error: 'AI explanations are unavailable', retryable: true }`. In both 502 and 503 cases, the client uses its locally generated matching cards with fixed fallback text so valid cards remain visible and actionable.
 8. Rebuild the response with an allowlist: preserve only server candidate IDs and 1–240 character text fields; reject reasons/trade-offs containing currency symbols, decimal/currency-number patterns, or financial assertions. Financial fields are never forwarded.
 9. Echo only the validated `requestId` and `basketRevision`; log provider error detail server-side and never expose it to the client.
 
@@ -547,9 +567,9 @@ basketbrain/
 
 ## Important Failure Modes
 
-- **`OPENAI_API_KEY` missing/rejected or model unavailable** → Route Handler uses 503 `model_unavailable` (`retryable: true`), returns server-built candidates with fixed text, and `RecommendationsPanel` shows “AI explanations are unavailable.” Basket, cards, and totals remain usable.
+- **`OPENAI_API_KEY` missing/rejected or model unavailable** → Route Handler uses 503 `model_unavailable` (`retryable: true`); `RecommendationsPanel` uses locally generated fallback cards and shows “AI explanations are unavailable.” Basket, cards, and totals remain usable.
 
-- **OpenAI returns malformed, refused, incomplete, empty, or timed-out output** → Route Handler uses 502 `provider_failed` (`retryable: true`), returns server-built candidates with fixed text, and preserves the basket. It does not remove cards or change the budget-search status.
+- **OpenAI returns malformed, refused, incomplete, empty, or timed-out output** → Route Handler uses 502 `provider_failed` (`retryable: true`); `RecommendationsPanel` uses locally generated fallback cards and preserves the basket. It does not remove cards or change the budget-search status.
 
 - **Request exceeds limits, has duplicate/invalid IDs, or has invalid values** → Route Handler returns 400. A rate-limited public request returns 429 (`retryable: true`); a body exceeding 32 KiB returns 413.
 
@@ -611,7 +631,7 @@ Implements `prd.md > Architecture principles > Testing`.
 - `applyRecommendation` reducer: atomic valid acceptance adds realized saving to `accumulatedSavingsMinor`, increments revision, retains unrelated proposals, and never auto-applies another proposal
 - `applyRecommendation` reducer: invalid target marks only that proposal `needs-review`; rejected IDs stay excluded
 - Response freshness: stale revision, mismatched request ID, overlapping requests, and out-of-order responses cannot replace current state
-- `findBudgetSolution`: exact cheapest-per-item existence uses only displayed, pending, valid, non-rejected cards; enumeration completes all 1-change, then 2-change plans, with item-ID/candidate-ID tie breaks
+- `findBudgetSolution`: returns `already-within-budget` without searching when the current basket total fits; otherwise exact cheapest-per-item existence uses only displayed, pending, valid, non-rejected cards and enumeration completes all 1-change, then 2-change plans, with item-ID/candidate-ID tie breaks
 - `findBudgetSolution`: stops at the first completed valid size; if the cap occurs before a size completes, returns `search-limit-reached` with the cheapest-per-item plan labeled “may not be the least disruptive”
 - RecommendationsPanel: failed, aborted, 400, 413, 429, and network requests preserve locally generated fallback cards; 429 shows the distinct rate-limit notice
 
@@ -643,7 +663,7 @@ Implements `prd.md > Architecture principles > Testing`.
 - AI ranks and explains only server-derived candidate IDs; it cannot create candidates or financial claims. Rejected IDs are excluded until a fresh request.
 - Substitutions require exact `packageSignature` equality. No package conversion or currency conversion exists.
 - Price, quantity, IDs, text, safe-integer, request, and output limits are specified in the shared client/server contract.
-- Proposal validity is item-snapshot-based; revision tags protect only against stale network responses. Reducer acceptance is atomic, preserves unrelated proposals, and resets the savings baseline after manual edits.
+- Proposal validity is item-snapshot-based; revision tags protect only against stale network responses. Reducer acceptance is atomic and preserves unrelated proposals.
 - The initial configured OpenAI default is `gpt-6-luna` through `OPENAI_MODEL`; one-time cached server verification is required before provider use and no account access is claimed here.
 
 **Unresolved decisions (kept within the approved scope):**

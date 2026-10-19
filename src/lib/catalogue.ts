@@ -100,16 +100,16 @@ const SAMPLE_ITEMS = [
   { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a001', name: 'Semi skim milk', productId: 'milk-semi-1l', quantityHundredths: 100, unitSize: '1 litre', priority: 'flexible' as const },
   { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a002', name: 'Whole wheat bread', productId: 'bread-wholemeal-800g', quantityHundredths: 100, unitSize: '800 g', priority: 'essential' as const },
   { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a003', name: 'Penne', productId: 'pasta-penne-500g', quantityHundredths: 200, unitSize: '500 g', priority: 'flexible' as const },
-  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a004', name: 'Plantain', productId: 'rice-longgrain-1kg', quantityHundredths: 100, priority: 'optional' as const },
+  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a004', name: 'Plantain', quantityHundredths: 100, priority: 'optional' as const, illustrativePrices: { GBP: 150, USD: 199, EUR: 175, NGN: 2400 } },
 ];
 
 export function loadSampleBasket(currency: SupportedCurrency): BasketItem[] {
   assertCurrency(currency);
   return SAMPLE_ITEMS.map((sample) => {
-    const product = catalogue.find((candidate) => candidate.id === sample.productId);
-    if (!product) throw new BasketValidationError('Sample item references an unknown catalogue product.');
-    const { productId: _productId, ...itemDetails } = sample;
-    const item: BasketItem = { ...itemDetails, unitPriceMinor: product.pricesMinor[currency], currency, matchStatus: 'unmatched' };
+    const product = 'productId' in sample ? catalogue.find((candidate) => candidate.id === sample.productId) : undefined;
+    if ('productId' in sample && !product) throw new BasketValidationError('Sample item references an unknown catalogue product.');
+    const { productId: _productId, illustrativePrices, ...itemDetails } = sample;
+    const item: BasketItem = { ...itemDetails, unitPriceMinor: product ? product.pricesMinor[currency] : illustrativePrices[currency], currency, matchStatus: 'unmatched' };
     return applyMatchResult(item, matchCatalogueItem(item.name, currency));
   });
 }

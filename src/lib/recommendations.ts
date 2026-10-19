@@ -11,6 +11,18 @@ export interface EvaluatedCandidate { candidate: ServerBuiltCandidate; proposedI
 export type BudgetSearchResult = {status:'already-within-budget'}|{status:'solution-found';solution:EvaluatedCandidate[];leastDisruptive:'confirmed'}|{status:'no-solution-among-evaluated-candidates'}|{status:'search-limit-reached';solution:EvaluatedCandidate[];leastDisruptive:'may-not-be-least-disruptive'};
 export interface ProviderText { candidateId: string; reason?: string; tradeOffs?: string; }
 
+export function isCurrentRecommendationRequest(activeRequestId: string, latestRevision: number, requestId: string, requestRevision: number): boolean { return activeRequestId === requestId && latestRevision === requestRevision; }
+
+export function applyRecommendationToItems(rec: Recommendation, items: BasketItem[]): BasketItem[] {
+  const item = items.find((entry) => entry.id === rec.basketItemId);
+  if (!item) return items;
+  if (rec.type === 'removal') return items.filter((entry) => entry.id !== item.id);
+  if (rec.type === 'quantity-reduction') return items.map((entry) => entry.id === item.id ? { ...entry, quantityHundredths: rec.proposedQuantityHundredths! } : entry);
+  const product = catalogue.find((entry) => entry.id === rec.proposedCatalogueId);
+  if (!product) return items;
+  return items.map((entry) => entry.id === item.id ? { ...entry, name: product.name, unitSize: `${product.packageSize} ${product.packageUnit}`, unitPriceMinor: product.pricesMinor[item.currency], catalogueId: product.id, confirmedPackageSignature: product.packageSignature } : entry);
+}
+
 const fallback = (candidate: ServerBuiltCandidate) => candidate.type === 'substitution'
   ? { reason: 'This recorded catalogue alternative costs less for the same package.', tradeOffs: 'The product choice changes.' }
   : candidate.type === 'removal'

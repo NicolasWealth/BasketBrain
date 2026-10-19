@@ -1,6 +1,6 @@
 import { BasketItem } from '../lib/basket';
 import { confirmCatalogueMatch, catalogue } from '../lib/catalogue';
-import { buildRecommendationCard, findBudgetSolution, generateCandidates, revalidateRecommendation } from '../lib/recommendations';
+import { applyRecommendationToItems, buildRecommendationCard, findBudgetSolution, generateCandidates, isCurrentRecommendationRequest, revalidateRecommendation } from '../lib/recommendations';
 
 const item: BasketItem = confirmCatalogueMatch({id:'123e4567-e89b-42d3-a456-426614174000',name:'Semi skim milk',quantityHundredths:200,unitPriceMinor:300,currency:'GBP',priority:'flexible',matchStatus:'needs-confirmation',pendingMatchId:'milk-semi-1l'},catalogue.find(p=>p.id==='milk-semi-1l')!);
 describe('recommendation engine',()=>{
@@ -9,5 +9,7 @@ describe('recommendation engine',()=>{
   it('reports already-within-budget without searching',()=>expect(findBudgetSolution([item],1000,[])).toEqual({status:'already-within-budget'}));
   it('finds the fewest-change valid solution',()=>{const card=buildRecommendationCard(generateCandidates([item],'GBP')[0],[item],'GBP',0)!;const evaluated={candidate:card,proposedItems:[item],savingMinor:card.savingMinor};expect(findBudgetSolution([item],300,[evaluated])).toMatchObject({status:'solution-found',leastDisruptive:'confirmed',solution:[evaluated]});});
   it('marks package-label edits as needing review',()=>{const card=buildRecommendationCard(generateCandidates([item],'GBP')[0],[item],'GBP',0)!;expect(revalidateRecommendation(card,[{...item,unitSize:'different label'}],'GBP')).toBe('needs-review');});
+  it('uses the trusted replacement package label when accepting a substitution',()=>{const card=buildRecommendationCard(generateCandidates([item],'GBP')[0],[{...item,unitSize:'old label'}],'GBP',0)!;const accepted=applyRecommendationToItems(card,[{...item,unitSize:'old label'}])[0];expect(accepted).toMatchObject({name:'Whole milk',unitSize:'1000 ml',catalogueId:'milk-whole-1l',confirmedPackageSignature:'ml:1000',unitPriceMinor:139});});
+  it('rejects stale revisions and overlapping recommendation responses',()=>{expect(isCurrentRecommendationRequest('new',2,'old',1)).toBe(false);expect(isCurrentRecommendationRequest('new',2,'old',2)).toBe(false);expect(isCurrentRecommendationRequest('new',2,'new',1)).toBe(false);expect(isCurrentRecommendationRequest('new',2,'new',2)).toBe(true);});
   it('reports no solution when the cheapest choice per item cannot meet the budget',()=>{const card=buildRecommendationCard(generateCandidates([item],'GBP')[0],[item],'GBP',0)!;const evaluated={candidate:card,proposedItems:[item],savingMinor:card.savingMinor};expect(findBudgetSolution([item],1,[evaluated])).toEqual({status:'no-solution-among-evaluated-candidates'});});
 });

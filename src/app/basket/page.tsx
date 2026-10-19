@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { addBasketItem, applyAcceptedBasketChange, applyManualBasketEdit, calculateBasketTotalMinor, calculateOverspendMinor, formatCurrency, parseMoneyToMinor, parseQuantityToHundredths } from '../../lib/basket';
 import { applyMatchResult, catalogue, confirmCatalogueMatch, editBasketItemName, editBasketItemUnitSize, formatPackage, matchCatalogueItem } from '../../lib/catalogue';
-import { buildRecommendationCard, findBudgetSolution, generateCandidates, revalidateRecommendation } from '../../lib/recommendations';
+import { applyRecommendationToItems, buildRecommendationCard, findBudgetSolution, generateCandidates, isCurrentRecommendationRequest, revalidateRecommendation } from '../../lib/recommendations';
 import { useSession } from '../SessionProvider';
 
 export default function BasketPage() {
@@ -52,21 +52,20 @@ export default function BasketPage() {
     let texts = new Map<string, { candidateId: string; reason?: string; tradeOffs?: string }>();
     try {
       const response = await fetch('/api/recommendations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ requestId, basketRevision: revision, budgetMinor: state.budgetMinor, currency: state.currency, items: state.items }) });
-      if (activeRequest.current !== requestId || latestRevision.current !== revision) return;
+      if (!isCurrentRecommendationRequest(activeRequest.current, latestRevision.current, requestId, revision)) return;
       if (response.ok) {
         const body = await response.json() as { requestId: string; basketRevision: number; proposals: Array<{ candidateId: string; reason?: string; tradeOffs?: string }> };
         if (body.requestId === requestId && body.basketRevision === revision) texts = new Map(body.proposals.map((proposal) => [proposal.candidateId, proposal]));
       } else setStatus(response.status === 429 ? 'Too many requests; using app-written explanations.' : 'AI explanations are unavailable; using app-written explanations.');
     } catch { setStatus('AI explanations are unavailable; using app-written explanations.'); }
     finally { if (activeRequest.current === requestId) setLoading(false); }
-    if (activeRequest.current !== requestId || latestRevision.current !== revision) return;
+    if (!isCurrentRecommendationRequest(activeRequest.current, latestRevision.current, requestId, revision)) return;
     dispatch({ type: 'recommendations', recommendations: candidates.map((candidate) => buildRecommendationCard(candidate, state.items, state.currency, revision, texts.get(candidate.candidateId))).filter((card): card is NonNullable<typeof card> => !!card) });
   }
   function accept(id: string) {
     const rec = state.recommendations.find((entry) => entry.id === id);
     if (!rec || revalidateRecommendation(rec, state.items, state.currency) !== 'valid') return;
-    const item = state.items.find((entry) => entry.id === rec.basketItemId)!;
-    const items = rec.type === 'removal' ? state.items.filter((entry) => entry.id !== item.id) : state.items.map((entry) => entry.id !== item.id ? entry : rec.type === 'substitution' ? { ...entry, name: rec.proposedName, unitPriceMinor: rec.proposedUnitPriceMinor, catalogueId: rec.proposedCatalogueId, confirmedPackageSignature: catalogue.find((product) => product.id === rec.proposedCatalogueId)?.packageSignature } : { ...entry, quantityHundredths: rec.proposedQuantityHundredths! });
+    const items = applyRecommendationToItems(rec, state.items);
     const updated = applyAcceptedBasketChange(state, items);
     dispatch({ type: 'replace', state: updated, recommendations: state.recommendations.map((entry) => entry.id === id ? { ...entry, status: 'accepted' as const } : revalidateRecommendation(entry, items, state.currency) === 'valid' ? entry : { ...entry, status: 'needs-review' as const }) });
   }

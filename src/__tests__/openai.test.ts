@@ -33,5 +33,11 @@ describe('OpenAI provider', () => {
     await expect(new OpenAIProvider().getRecommendations([candidate])).rejects.toThrow();
     fetchMock.mockResolvedValueOnce(response({ output_text: '{"proposals":[]}' }));
     await expect(new OpenAIProvider().getRecommendations([candidate])).rejects.toThrow('provider_failed');
+    fetchMock.mockResolvedValueOnce(response({ status: 'incomplete', output_text: '{"proposals":[{}]}' }));
+    await expect(new OpenAIProvider().getRecommendations([candidate])).rejects.toThrow('provider_failed');
+    fetchMock.mockResolvedValueOnce(response({ status: 'completed', output: [{ content: [{ type: 'refusal', refusal: 'no' }] }], output_text: '{"proposals":[{}]}' }));
+    await expect(new OpenAIProvider().getRecommendations([candidate])).rejects.toThrow('provider_failed');
+    fetchMock.mockRejectedValueOnce(new Error('timeout'));
+    await expect(new OpenAIProvider().getRecommendations([candidate])).rejects.toThrow('timeout');
   });
 });

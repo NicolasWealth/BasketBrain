@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       && typeof proposal.reason === 'string' && proposal.reason.length >= 1 && proposal.reason.length <= 240
       && typeof proposal.tradeOffs === 'string' && proposal.tradeOffs.length >= 1 && proposal.tradeOffs.length <= 240
       && !invalidProviderText.test(`${proposal.reason} ${proposal.tradeOffs}`));
-    if (valid.length === 0 || valid.length !== proposals.length) return error('provider_failed', 502, data.requestId, data.basketRevision);
+    if (valid.length !== candidates.length || new Set(valid.map((proposal) => proposal.candidateId)).size !== candidates.length) return error('provider_failed', 502, data.requestId, data.basketRevision);
     return NextResponse.json({ requestId: data.requestId, basketRevision: data.basketRevision, proposals: valid });
   } catch {
     return error('provider_failed', 502, data.requestId, data.basketRevision);

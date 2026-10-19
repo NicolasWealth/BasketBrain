@@ -62,7 +62,9 @@ export class OpenAIProvider implements AIProvider {
         body: JSON.stringify({ model: process.env.OPENAI_MODEL ?? 'gpt-6-luna', input: buildPrompt(candidates), max_output_tokens: 1200, text: { format: { type: 'json_schema', name: 'recommendations', strict: true, schema: responseSchema } } }),
       });
       if (!response.ok) throw new Error('provider_failed');
-      const data = await response.json() as { output_text?: string };
+      const data = await response.json() as { output_text?: string; status?: string; output?: Array<{ content?: Array<{ type?: string; refusal?: string }> }> };
+      if (data.status && data.status !== 'completed') throw new Error('provider_failed');
+      if (data.output?.some((part) => part.content?.some((content) => content.type === 'refusal' || content.refusal))) throw new Error('provider_failed');
       const parsed = JSON.parse(data.output_text ?? '{}') as { proposals?: ProviderText[] };
       if (!Array.isArray(parsed.proposals) || parsed.proposals.length === 0) throw new Error('provider_failed');
       return parsed.proposals;

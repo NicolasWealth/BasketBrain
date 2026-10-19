@@ -29,13 +29,13 @@ Build mode: fast
   Learner check: Confirm that the matching flow distinguishes a name match from a confirmed package.
   Commit: `Add catalogue matching`
 
-- [ ] **3. The app generates and evaluates budget-saving candidates deterministically**
+- [x] **3. The app generates and evaluates budget-saving candidates deterministically**
   Becomes usable: Confirmed basket items produce valid candidate cards, and the budget search finds whether a solution exists among those candidates.
   Why now: This is the product's core budget-planning behavior and must be correct before AI enrichment or UI presentation.
   PRD ref: `prd.md > Features and Behavior > Recommendations`, `prd.md > Features and Behavior > Completion and Outcome States`
   Spec ref: `spec.md > Recommendation Engine (lib/recommendations.ts)`, `spec.md > Testing > __tests__/recommendations.test.ts`
   Build: Implement `src/lib/recommendations.ts` and `src/__tests__/recommendations.test.ts`, including candidate caps, deterministic IDs, fixed fallback text, revalidation, and bounded least-disruptive search.
-  Verify (mechanical): Run `npm test -- recommendations.test.ts`.
+  Verify (mechanical): Passed `node .\node_modules\jest\bin\jest.js --runInBand` — 3 suites, 56 tests; `npm.cmd run build` completed successfully.
   Learner check: Inspect a generated plan and confirm it uses the fewest changed items before other tie-breakers.
   Commit: `Add recommendation engine`
 

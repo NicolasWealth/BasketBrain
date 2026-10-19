@@ -1,0 +1,115 @@
+import rawCatalogue from '../data/catalogue.json';
+import { BasketItem, BasketValidationError, parseName, parseUnitSize, SUPPORTED_CURRENCIES, SupportedCurrency } from './basket';
+
+export interface CatalogueProduct {
+  id: string;
+  name: string;
+  category: string;
+  packageUnit: 'g' | 'ml' | 'count';
+  packageSize: number;
+  packageSignature: string;
+  pricesMinor: Record<SupportedCurrency, number>;
+  aliases: string[];
+  alternatives: string[];
+}
+
+export type MatchResult = { status: 'needs-confirmation'; candidate: CatalogueProduct } | { status: 'unmatched' };
+const PACKAGE_UNITS = ['g', 'ml', 'count'] as const;
+
+function assertCurrency(currency: string): asserts currency is SupportedCurrency {
+  if (!(SUPPORTED_CURRENCIES as readonly string[]).includes(currency)) throw new BasketValidationError('Unsupported currency.');
+}
+
+export function normaliseCatalogueName(input: string): string {
+  return input.toLowerCase().replace(/\bpack\s+of\b/gu, ' ').replace(/\bx\s*\d+\b/gu, ' ').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/gu, ' ').trim();
+}
+
+export function formatPackage(product: CatalogueProduct): string {
+  return `${product.name}, ${product.packageSize} ${product.packageUnit}`;
+}
+
+function assertPositiveSafeInteger(value: unknown, field: string): void {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) throw new BasketValidationError(`${field} must be a positive safe integer.`);
+}
+
+export function validateCatalogue(products: CatalogueProduct[]): void {
+  const ids = new Set<string>();
+  const labels = new Set<string>();
+  for (const product of products) {
+    if (!product.id || ids.has(product.id)) throw new BasketValidationError('Catalogue product IDs must be unique.');
+    ids.add(product.id);
+    if (!product.name || !product.category || !PACKAGE_UNITS.includes(product.packageUnit)) throw new BasketValidationError('Catalogue product metadata is invalid.');
+    assertPositiveSafeInteger(product.packageSize, 'Package size');
+    if (product.packageSignature !== `${product.packageUnit}:${product.packageSize}`) throw new BasketValidationError('Catalogue package signature is invalid.');
+    if (!Array.isArray(product.aliases) || !Array.isArray(product.alternatives)) throw new BasketValidationError('Catalogue aliases and alternatives must be arrays.');
+    for (const label of [product.name, ...product.aliases]) {
+      const normalised = normaliseCatalogueName(label);
+      if (!normalised || labels.has(normalised)) throw new BasketValidationError('Catalogue names and aliases must be globally collision-free.');
+      labels.add(normalised);
+    }
+    for (const currency of SUPPORTED_CURRENCIES) assertPositiveSafeInteger(product.pricesMinor?.[currency], `Catalogue price for ${currency}`);
+  }
+  for (const product of products) for (const alternativeId of product.alternatives) {
+    if (alternativeId === product.id) throw new BasketValidationError('Catalogue products cannot reference themselves as alternatives.');
+    const alternative = products.find((candidate) => candidate.id === alternativeId);
+    if (!alternative || !alternative.alternatives.includes(product.id)) throw new BasketValidationError('Catalogue alternatives must reference each other.');
+    if (alternative.packageSignature !== product.packageSignature) throw new BasketValidationError('Catalogue alternatives must have matching package signatures.');
+  }
+}
+
+export const catalogue = rawCatalogue as CatalogueProduct[];
+validateCatalogue(catalogue);
+
+function matchingProducts(input: string, predicate: (label: string, value: string) => boolean): CatalogueProduct[] {
+  const value = normaliseCatalogueName(input);
+  if (!value) return [];
+  return catalogue.filter((product) => [product.name, ...product.aliases].some((label) => predicate(normaliseCatalogueName(label), value)));
+}
+
+export function matchCatalogueItem(input: string, currency: SupportedCurrency): MatchResult {
+  assertCurrency(currency);
+  const exact = matchingProducts(input, (label, value) => label === value);
+  if (exact.length === 1) return { status: 'needs-confirmation', candidate: exact[0] };
+  if (exact.length > 1) return { status: 'unmatched' };
+  const partial = matchingProducts(input, (label, value) => label.includes(value) || value.includes(label));
+  return partial.length === 1 ? { status: 'needs-confirmation', candidate: partial[0] } : { status: 'unmatched' };
+}
+
+export function applyMatchResult(item: BasketItem, match: MatchResult): BasketItem {
+  return match.status === 'unmatched'
+    ? { ...item, matchStatus: 'unmatched', catalogueId: undefined, confirmedPackageSignature: undefined, pendingMatchId: undefined }
+    : { ...item, matchStatus: 'needs-confirmation', catalogueId: undefined, confirmedPackageSignature: undefined, pendingMatchId: match.candidate.id };
+}
+
+export function confirmCatalogueMatch(item: BasketItem, product: CatalogueProduct): BasketItem {
+  const match = matchCatalogueItem(item.name, item.currency);
+  if (match.status !== 'needs-confirmation' || match.candidate.id !== product.id || product.pricesMinor[item.currency] === undefined) throw new BasketValidationError('The product is not the current unique catalogue match.');
+  return { ...item, matchStatus: 'confirmed', catalogueId: product.id, confirmedPackageSignature: product.packageSignature, pendingMatchId: undefined };
+}
+
+export function editBasketItemName(item: BasketItem, name: string): BasketItem {
+  const updated = { ...item, name: parseName(name) };
+  return applyMatchResult(updated, matchCatalogueItem(updated.name, updated.currency));
+}
+
+export function editBasketItemUnitSize(item: BasketItem, unitSize: string | undefined): BasketItem {
+  return { ...item, unitSize: parseUnitSize(unitSize) };
+}
+
+const SAMPLE_ITEMS = [
+  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a001', name: 'Semi skim milk', productId: 'milk-semi-1l', quantityHundredths: 100, unitSize: '1 litre', priority: 'flexible' as const },
+  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a002', name: 'Whole wheat bread', productId: 'bread-wholemeal-800g', quantityHundredths: 100, unitSize: '800 g', priority: 'essential' as const },
+  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a003', name: 'Penne', productId: 'pasta-penne-500g', quantityHundredths: 200, unitSize: '500 g', priority: 'flexible' as const },
+  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a004', name: 'Plantain', productId: 'rice-longgrain-1kg', quantityHundredths: 100, priority: 'optional' as const },
+];
+
+export function loadSampleBasket(currency: SupportedCurrency): BasketItem[] {
+  assertCurrency(currency);
+  return SAMPLE_ITEMS.map((sample) => {
+    const product = catalogue.find((candidate) => candidate.id === sample.productId);
+    if (!product) throw new BasketValidationError('Sample item references an unknown catalogue product.');
+    const { productId: _productId, ...itemDetails } = sample;
+    const item: BasketItem = { ...itemDetails, unitPriceMinor: product.pricesMinor[currency], currency, matchStatus: 'unmatched' };
+    return applyMatchResult(item, matchCatalogueItem(item.name, currency));
+  });
+}

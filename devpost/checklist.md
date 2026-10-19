@@ -19,13 +19,13 @@ Build mode: fast
   Learner check: Review an example basket total and confirm that accepting a cheaper substitution reduces it by the specified saving.
   Commit: `Add basket arithmetic`
 
-- [ ] **2. Entered items can be matched and package-confirmed against the catalogue**
+- [x] **2. Entered items can be matched and package-confirmed against the catalogue**
   Becomes usable: Static catalogue data and deterministic matching identify eligible products in the same currency, including package confirmation for every item.
   Why now: Recommendations may only be generated from confirmed catalogue relationships and recorded prices.
   PRD ref: `prd.md > Features and Behavior > Catalogue and Matching`
   Spec ref: `spec.md > Catalogue and Matching (lib/catalogue.ts)`, `spec.md > Data Model`
   Build: Add `src/data/catalogue.json`, `src/lib/catalogue.ts`, and `src/__tests__/catalogue.test.ts` with the confirmed-package and currency rules.
-  Verify (mechanical): Run `npm test -- catalogue.test.ts`.
+  Verify (mechanical): Passed `node .\node_modules\jest\bin\jest.js src/__tests__/catalogue.test.ts --runInBand --detectOpenHandles` — 1 suite, 10 tests.
   Learner check: Confirm that the matching flow distinguishes a name match from a confirmed package.
   Commit: `Add catalogue matching`
 

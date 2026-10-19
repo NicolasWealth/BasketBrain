@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { addBasketItem, applyAcceptedBasketChange, applyManualBasketEdit, calculateBasketTotalMinor, calculateOverspendMinor, formatCurrency, parseMoneyToMinor, parseQuantityToHundredths } from '../../lib/basket';
 import { applyMatchResult, catalogue, confirmCatalogueMatch, editBasketItemName, editBasketItemUnitSize, formatPackage, matchCatalogueItem } from '../../lib/catalogue';
-import { buildRecommendationCard, generateCandidates, revalidateRecommendation } from '../../lib/recommendations';
+import { buildRecommendationCard, findBudgetSolution, generateCandidates, revalidateRecommendation } from '../../lib/recommendations';
 import { useSession } from '../SessionProvider';
 
 export default function BasketPage() {
@@ -18,11 +18,15 @@ export default function BasketPage() {
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
   useEffect(() => { if (!session) router.replace('/'); }, [router, session]);
+  useEffect(() => { latestRevision.current = session?.basketRevision ?? -1; }, [session?.basketRevision]);
   if (!session) return null;
   const state = session;
-  useEffect(() => { latestRevision.current = state.basketRevision; }, [state.basketRevision]);
   const total = calculateBasketTotalMinor(state.items);
   const overspend = calculateOverspendMinor(total, state.budgetMinor);
+  const evaluated = state.recommendations
+    .filter((recommendation) => recommendation.status === 'pending' && !state.rejected.includes(recommendation.id) && revalidateRecommendation(recommendation, state.items, state.currency) === 'valid')
+    .map((recommendation) => ({ candidate: recommendation, proposedItems: state.items, savingMinor: recommendation.savingMinor }));
+  const budgetSearch = findBudgetSolution(state.items, state.budgetMinor, evaluated);
   const saveManual = (items: typeof state.items) => dispatch({ type: 'replace', state: applyManualBasketEdit(state, items) });
 
   function add(event: FormEvent) {
@@ -72,6 +76,11 @@ export default function BasketPage() {
     <section className="card"><h1>Your basket</h1><form onSubmit={add}><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Item name" /><input value={quantity} onChange={(event) => setQuantity(event.target.value)} /><input value={price} onChange={(event) => setPrice(event.target.value)} placeholder="Unit price" /><button>Add item</button></form>
       <ul>{state.items.map((item) => <li key={item.id}><form onSubmit={(event) => edit(item, event)}><input name="name" defaultValue={item.name} aria-label={`${item.id}-name`} /><input name="quantity" defaultValue={(item.quantityHundredths / 100).toString()} aria-label={`${item.id}-quantity`} /><input name="price" defaultValue={(item.unitPriceMinor / 100).toFixed(2)} aria-label={`${item.id}-price`} /><input name="unitSize" defaultValue={item.unitSize ?? ''} placeholder="Package label" /><select name="priority" defaultValue={item.priority}><option value="essential">Essential</option><option value="flexible">Flexible</option><option value="optional">Optional</option></select><button>Save item</button><button type="button" onClick={() => saveManual(state.items.filter((entry) => entry.id !== item.id))}>Remove</button>{item.matchStatus === 'needs-confirmation' && <span> {formatPackage(catalogue.find((product) => product.id === item.pendingMatchId)!)} <button type="button" onClick={() => saveManual(state.items.map((entry) => entry.id === item.id ? confirmCatalogueMatch(entry, catalogue.find((product) => product.id === item.pendingMatchId)!) : entry))}>Confirm match</button></span>}<em>{item.matchStatus}</em></form></li>)}</ul>
       {overspend > 0 && <button onClick={recommend} disabled={loading}>{loading ? 'Finding ways to save' : 'Find ways to save'}</button>}</section>
-    {status && <p role="status">{status}</p>}<section className="card">{state.recommendations.map((rec) => <article key={rec.id}><b>{rec.proposedName}</b><p>Save {formatCurrency(rec.savingMinor, state.currency)}. {rec.reason}</p><p>{rec.tradeOffs}</p><p>{rec.status}</p>{rec.status === 'pending' && <><button onClick={() => accept(rec.id)}>Accept change</button><button onClick={() => dispatch({ type: 'reject', id: rec.id })}>Reject</button></>}</article>)}</section>
+    {status && <p role="status">{status}</p>}
+    {budgetSearch.status === 'already-within-budget' && <p role="status">Your basket is within budget.</p>}
+    {overspend > 0 && budgetSearch.status === 'solution-found' && <p role="status">A plan using the fewest changes can meet your budget.</p>}
+    {overspend > 0 && budgetSearch.status === 'no-solution-among-evaluated-candidates' && <p role="status">No solution was found among the evaluated recommendations.</p>}
+    {overspend > 0 && budgetSearch.status === 'search-limit-reached' && <p role="status">A possible plan was found, but it may not be the least disruptive.</p>}
+    <section className="card">{state.recommendations.map((rec) => <article key={rec.id}><b>{rec.proposedName}</b><p>Save {formatCurrency(rec.savingMinor, state.currency)}. {rec.reason}</p><p>{rec.tradeOffs}</p><p>{rec.status}</p>{rec.status === 'pending' && <><button onClick={() => accept(rec.id)}>Accept change</button><button onClick={() => dispatch({ type: 'reject', id: rec.id })}>Reject</button></>}</article>)}</section>
   </main>;
 }

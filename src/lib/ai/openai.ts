@@ -20,6 +20,9 @@ const responseSchema = {
   additionalProperties: false,
 };
 let cachedVerification: { promise: Promise<boolean>; expiresAt: number } | undefined;
+export function resetOpenAIModelVerificationForTests(): void {
+  cachedVerification = undefined;
+}
 export function verifyOpenAIModelAccess(): Promise<boolean> {
   if (cachedVerification && cachedVerification.expiresAt > Date.now()) return cachedVerification.promise;
   const promise = (async () => {
@@ -60,7 +63,9 @@ export class OpenAIProvider implements AIProvider {
       });
       if (!response.ok) throw new Error('provider_failed');
       const data = await response.json() as { output_text?: string };
-      return (JSON.parse(data.output_text ?? '{}') as { proposals?: ProviderText[] }).proposals ?? [];
+      const parsed = JSON.parse(data.output_text ?? '{}') as { proposals?: ProviderText[] };
+      if (!Array.isArray(parsed.proposals) || parsed.proposals.length === 0) throw new Error('provider_failed');
+      return parsed.proposals;
     } finally { clearTimeout(timeout); }
   }
 }

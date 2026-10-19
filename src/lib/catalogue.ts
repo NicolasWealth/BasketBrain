@@ -109,7 +109,8 @@ export function loadSampleBasket(currency: SupportedCurrency): BasketItem[] {
     const product = 'productId' in sample ? catalogue.find((candidate) => candidate.id === sample.productId) : undefined;
     if ('productId' in sample && !product) throw new BasketValidationError('Sample item references an unknown catalogue product.');
     const { productId: _productId, illustrativePrices, ...itemDetails } = sample;
-    const item: BasketItem = { ...itemDetails, unitPriceMinor: product ? product.pricesMinor[currency] : illustrativePrices[currency], currency, matchStatus: 'unmatched' };
+    if (!product && !illustrativePrices) throw new BasketValidationError('Sample item has no illustrative price.');
+    const item: BasketItem = { ...itemDetails, unitPriceMinor: product ? product.pricesMinor[currency] : illustrativePrices![currency], currency, matchStatus: 'unmatched' };
     return applyMatchResult(item, matchCatalogueItem(item.name, currency));
   });
 }

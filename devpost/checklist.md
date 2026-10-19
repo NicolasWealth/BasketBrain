@@ -39,13 +39,13 @@ Build mode: fast
   Learner check: Inspect a generated plan and confirm it uses the fewest changed items before other tie-breakers.
   Commit: `Add recommendation engine`
 
-- [ ] **4. The recommendations API securely enriches every server-built candidate**
+- [x] **4. The recommendations API securely enriches every server-built candidate**
   Becomes usable: The server validates the request, builds candidates itself, obtains optional AI explanations, and returns safe fallbacks whenever enrichment is unavailable.
   Why now: The client needs a stable contract before it can render recommendation and failure states.
   PRD ref: `prd.md > Features and Behavior > Recommendations`, `prd.md > States and Boundaries`
   Spec ref: `spec.md > API Contract: /api/recommendations`, `spec.md > AI Provider Adapter (lib/ai/)`
   Build: Add the AI adapter, `src/app/api/recommendations/route.ts`, and `src/__tests__/api-route.test.ts`; keep the API key server-only and the model configurable.
-  Verify (mechanical): Run `npm test -- api-route.test.ts`.
+  Verify (mechanical): Passed `node .\\node_modules\\jest\\bin\\jest.js --runInBand` â€” 4 suites, 61 tests; `npm.cmd run build` completed successfully.
   Learner check: Verify that a simulated provider outage still leaves fixed-text recommendation cards available.
   Commit: `Add recommendations API`
 

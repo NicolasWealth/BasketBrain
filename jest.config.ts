@@ -5,6 +5,7 @@ const config: Config = {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts'],
+  moduleNameMapper: { '^server-only$': '<rootDir>/src/__tests__/server-only.ts' },
 };
 
 export default config;

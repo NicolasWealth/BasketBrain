@@ -16,6 +16,8 @@ export interface BasketItem {
   catalogueId?: string;
   confirmedPackageSignature?: string;
   pendingMatchId?: string;
+  /** Set when the name is ambiguous — all candidate catalogue IDs the user can choose from. */
+  ambiguousCandidateIds?: string[];
 }
 
 export interface BasketState {

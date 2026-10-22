@@ -45,7 +45,7 @@ Build mode: fast
   PRD ref: `prd.md > Features and Behavior > Recommendations`, `prd.md > States and Boundaries`
   Spec ref: `spec.md > API Contract: /api/recommendations`, `spec.md > AI Provider Adapter (lib/ai/)`
   Build: Add the AI adapter, `src/app/api/recommendations/route.ts`, and `src/__tests__/api-route.test.ts`; keep the API key server-only and the model configurable.
-  Verify (mechanical): Passed `node .\\node_modules\\jest\\bin\\jest.js --runInBand` â€” 4 suites, 61 tests; `npm.cmd run build` completed successfully.
+  Verify (mechanical): Passed `node .\\node_modules\\jest\\bin\\jest.js --runInBand` â€” 5 suites, 83 tests; `node .\\node_modules\\next\\dist\\bin\\next build` completed successfully.
   Learner check: Verify that a simulated provider outage still leaves fixed-text recommendation cards available.
   Commit: `Add recommendations API`
 

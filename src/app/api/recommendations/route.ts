@@ -50,18 +50,39 @@ function validateTrustedBasket(data: Required<RequestBody>): void {
     validateBasketItem(item, data.currency);
     if (ids.has(item.id)) throw new Error('duplicate');
     ids.add(item.id);
-    const match = matchCatalogueItem(item.name, data.currency);
     if (item.matchStatus === 'confirmed') {
+      // The confirmed product must exist in catalogue with a matching packageSignature.
       const product = catalogue.find((entry) => entry.id === item.catalogueId);
-      if (match.status !== 'needs-confirmation' || match.candidate.id !== item.catalogueId || !product || product.packageSignature !== item.confirmedPackageSignature) throw new Error('tampered-confirmation');
+      if (!product || product.packageSignature !== item.confirmedPackageSignature) throw new Error('tampered-confirmation');
+      const match = matchCatalogueItem(item.name, data.currency);
+      if (match.status === 'needs-confirmation') {
+        // Unique name-match: must resolve to the same product.
+        if (match.candidate.id !== item.catalogueId) throw new Error('tampered-confirmation');
+      } else if (match.status === 'ambiguous') {
+        // Ambiguous name: catalogueId must be one of the known candidates for that name.
+        if (!match.candidates.some((c) => c.id === item.catalogueId)) throw new Error('tampered-confirmation');
+      } else {
+        // Name does not match any catalogue product at all — cannot be legitimately confirmed.
+        throw new Error('tampered-confirmation');
+      }
     } else if (item.matchStatus === 'needs-confirmation') {
-      if (match.status !== 'needs-confirmation' || item.pendingMatchId !== match.candidate.id || item.catalogueId || item.confirmedPackageSignature) throw new Error('tampered-pending-match');
+      const match = matchCatalogueItem(item.name, data.currency);
+      // Accept unique-match or ambiguous-match pending items.
+      if (match.status === 'needs-confirmation') {
+        if (item.pendingMatchId !== match.candidate.id || item.catalogueId || item.confirmedPackageSignature) throw new Error('tampered-pending-match');
+      } else if (match.status === 'ambiguous') {
+        if (!item.pendingMatchId || !match.candidates.some((c) => c.id === item.pendingMatchId) || item.catalogueId || item.confirmedPackageSignature) throw new Error('tampered-pending-match');
+      } else {
+        throw new Error('tampered-pending-match');
+      }
     } else if (item.catalogueId || item.confirmedPackageSignature || item.pendingMatchId) {
       throw new Error('tampered-unmatched-item');
     }
   }
   calculateBasketTotalMinor(data.items);
 }
+
+
 
 export async function POST(request: NextRequest) {
   if (Number(request.headers.get('content-length') ?? 0) > BODY_LIMIT_BYTES) return error('invalid_request', 413);

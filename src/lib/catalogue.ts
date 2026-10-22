@@ -13,7 +13,11 @@ export interface CatalogueProduct {
   alternatives: string[];
 }
 
-export type MatchResult = { status: 'needs-confirmation'; candidate: CatalogueProduct } | { status: 'unmatched' };
+export type MatchResult =
+  | { status: 'needs-confirmation'; candidate: CatalogueProduct }
+  | { status: 'ambiguous'; candidates: CatalogueProduct[] }
+  | { status: 'unmatched' };
+
 const PACKAGE_UNITS = ['g', 'ml', 'count'] as const;
 
 function assertCurrency(currency: string): asserts currency is SupportedCurrency {
@@ -70,21 +74,45 @@ export function matchCatalogueItem(input: string, currency: SupportedCurrency): 
   assertCurrency(currency);
   const exact = matchingProducts(input, (label, value) => label === value);
   if (exact.length === 1) return { status: 'needs-confirmation', candidate: exact[0] };
-  if (exact.length > 1) return { status: 'unmatched' };
+  if (exact.length > 1) return { status: 'ambiguous', candidates: exact };
   const partial = matchingProducts(input, (label, value) => label.includes(value) || value.includes(label));
-  return partial.length === 1 ? { status: 'needs-confirmation', candidate: partial[0] } : { status: 'unmatched' };
+  if (partial.length === 1) return { status: 'needs-confirmation', candidate: partial[0] };
+  if (partial.length > 1) return { status: 'ambiguous', candidates: partial };
+  return { status: 'unmatched' };
 }
 
 export function applyMatchResult(item: BasketItem, match: MatchResult): BasketItem {
-  return match.status === 'unmatched'
-    ? { ...item, matchStatus: 'unmatched', catalogueId: undefined, confirmedPackageSignature: undefined, pendingMatchId: undefined }
-    : { ...item, matchStatus: 'needs-confirmation', catalogueId: undefined, confirmedPackageSignature: undefined, pendingMatchId: match.candidate.id };
+  if (match.status === 'needs-confirmation') {
+    return { ...item, matchStatus: 'needs-confirmation', catalogueId: undefined, confirmedPackageSignature: undefined, pendingMatchId: match.candidate.id };
+  }
+  if (match.status === 'ambiguous') {
+    // Store first candidate as pending; UI will prompt user to pick from all candidates.
+    return { ...item, matchStatus: 'needs-confirmation', catalogueId: undefined, confirmedPackageSignature: undefined, pendingMatchId: match.candidates[0].id, ambiguousCandidateIds: match.candidates.map((c) => c.id) };
+  }
+  return { ...item, matchStatus: 'unmatched', catalogueId: undefined, confirmedPackageSignature: undefined, pendingMatchId: undefined, ambiguousCandidateIds: undefined };
 }
 
+/**
+ * Confirms a catalogue match where the item name produces a unique match.
+ * Throws if the match is not currently unique or the product doesn't match.
+ */
 export function confirmCatalogueMatch(item: BasketItem, product: CatalogueProduct): BasketItem {
   const match = matchCatalogueItem(item.name, item.currency);
   if (match.status !== 'needs-confirmation' || match.candidate.id !== product.id || product.pricesMinor[item.currency] === undefined) throw new BasketValidationError('The product is not the current unique catalogue match.');
-  return { ...item, matchStatus: 'confirmed', catalogueId: product.id, confirmedPackageSignature: product.packageSignature, pendingMatchId: undefined };
+  return { ...item, matchStatus: 'confirmed', catalogueId: product.id, confirmedPackageSignature: product.packageSignature, pendingMatchId: undefined, ambiguousCandidateIds: undefined };
+}
+
+/**
+ * Force-confirms a catalogue match for ambiguous or manually-selected products.
+ * Used when the user explicitly picks from a list of candidates.
+ * The product must exist in the catalogue with a valid price for the item's currency.
+ */
+export function forceConfirmCatalogueMatch(item: BasketItem, product: CatalogueProduct): BasketItem {
+  const knownProduct = catalogue.find((p) => p.id === product.id);
+  if (!knownProduct || knownProduct.pricesMinor[item.currency] === undefined) throw new BasketValidationError('The selected product is not in the catalogue.');
+  const match = matchCatalogueItem(item.name, item.currency);
+  if (match.status !== 'ambiguous' || !match.candidates.some((candidate) => candidate.id === product.id)) throw new BasketValidationError('The selected product is not a valid match for this item.');
+  return { ...item, matchStatus: 'confirmed', catalogueId: product.id, confirmedPackageSignature: product.packageSignature, pendingMatchId: undefined, ambiguousCandidateIds: undefined };
 }
 
 export function editBasketItemName(item: BasketItem, name: string): BasketItem {

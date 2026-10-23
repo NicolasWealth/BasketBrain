@@ -27,6 +27,7 @@ import {
 import {
   applyRecommendationToItems,
   buildRecommendationCard,
+  calculateBestAvailableSavingMinor,
   describeSavingsAvailability,
   findBudgetSolution,
   generateCandidates,
@@ -58,6 +59,13 @@ function itemStatus(item: BasketItem): string {
   if (item.matchStatus === 'confirmed') return 'Ready for savings ideas';
   if (item.matchStatus === 'needs-confirmation') return 'Needs a product check';
   return 'Price included; savings ideas unavailable for this grocery';
+}
+
+function recommendationStatus(status: 'pending' | 'accepted' | 'rejected' | 'needs-review'): string {
+  if (status === 'accepted') return 'Accepted — your basket total has been updated.';
+  if (status === 'rejected') return 'Not included in this basket.';
+  if (status === 'needs-review') return 'Review this idea after your recent basket change.';
+  return 'Ready to review.';
 }
 
 export default function BasketPage() {
@@ -92,6 +100,7 @@ export default function BasketPage() {
     .filter((recommendation) => recommendation.status === 'pending' && !state.rejected.includes(recommendation.id) && revalidateRecommendation(recommendation, state.items, state.currency) === 'valid')
     .map((recommendation) => ({ candidate: recommendation, proposedItems: state.items, savingMinor: recommendation.savingMinor }));
   const budgetSearch = findBudgetSolution(state.items, state.budgetMinor, evaluated);
+  const remainingShortfallMinor = Math.max(0, overspend - calculateBestAvailableSavingMinor(evaluated));
 
   function saveManual(items: BasketItem[]) {
     setSearchedCandidateCount(undefined);
@@ -212,10 +221,10 @@ export default function BasketPage() {
             return (
               <li key={item.id}>
                 <form onSubmit={(event) => save(item, event)}>
-                  <input value={fields.name} onChange={(event) => updateEdit(item.id, 'name', event.target.value)} aria-label={`${item.id}-name`} />
-                  <input value={fields.quantity} onChange={(event) => updateEdit(item.id, 'quantity', event.target.value)} aria-label={`${item.id}-quantity`} inputMode="decimal" />
-                  <input value={fields.price} onChange={(event) => updateEdit(item.id, 'price', event.target.value)} aria-label={`${item.id}-price`} inputMode="decimal" />
-                  <input value={fields.unitSize} onChange={(event) => updateEdit(item.id, 'unitSize', event.target.value)} placeholder="Package label" aria-label={`${item.id}-package`} />
+                  <input value={fields.name} onChange={(event) => updateEdit(item.id, 'name', event.target.value)} placeholder="Grocery name" aria-label={`${item.id}-name`} />
+                  <input value={fields.quantity} onChange={(event) => updateEdit(item.id, 'quantity', event.target.value)} placeholder="Quantity" aria-label={`${item.id}-quantity`} inputMode="decimal" />
+                  <input value={fields.price} onChange={(event) => updateEdit(item.id, 'price', event.target.value)} placeholder="Price paid" aria-label={`${item.id}-price`} inputMode="decimal" />
+                  <input value={fields.unitSize} onChange={(event) => updateEdit(item.id, 'unitSize', event.target.value)} placeholder="Package label (optional)" aria-label={`${item.id}-package`} />
                   <select value={fields.priority} onChange={(event) => updateEdit(item.id, 'priority', event.target.value)} aria-label={`${item.id}-priority`}>
                     <option value="essential">Essential</option>
                     <option value="flexible">Flexible</option>
@@ -241,7 +250,7 @@ export default function BasketPage() {
       {status && <p role="status">{status}</p>}
       {budgetSearch.status === 'already-within-budget' && <p role="status">Your basket is within budget.</p>}
       {overspend > 0 && searchedCandidateCount !== undefined && searchedCandidateCount > 0 && budgetSearch.status === 'solution-found' && <p role="status">A plan using the fewest changes can meet your budget.</p>}
-      {overspend > 0 && searchedCandidateCount !== undefined && searchedCandidateCount > 0 && budgetSearch.status === 'no-solution-among-evaluated-candidates' && <p role="status">The available changes still do not bring this basket within budget.</p>}
+      {overspend > 0 && searchedCandidateCount !== undefined && searchedCandidateCount > 0 && budgetSearch.status === 'no-solution-among-evaluated-candidates' && <p role="status">Even using every compatible saving idea would leave you {formatCurrency(remainingShortfallMinor, state.currency)} over budget. You can review your grocery priorities or budget.</p>}
       {overspend > 0 && searchedCandidateCount !== undefined && searchedCandidateCount > 0 && budgetSearch.status === 'search-limit-reached' && <p role="status">A possible plan was found, but it may not use the fewest changes.</p>}
       <section className="card">
         {state.recommendations.map((recommendation) => (
@@ -249,7 +258,7 @@ export default function BasketPage() {
             <b>{recommendation.proposedName}</b>
             <p>Save {formatCurrency(recommendation.savingMinor, state.currency)}. {recommendation.reason}</p>
             <p>{recommendation.tradeOffs}</p>
-            <p>{recommendation.status}</p>
+            <p>{recommendationStatus(recommendation.status)}</p>
             {recommendation.status === 'pending' && <><button onClick={() => accept(recommendation.id)}>Accept change</button><button onClick={() => dispatch({ type: 'reject', id: recommendation.id })}>Reject</button></>}
           </article>
         ))}

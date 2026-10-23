@@ -48,6 +48,15 @@ describe('catalogue matching', () => {
     expect(matchCatalogueItem('dragon fruit', 'GBP')).toEqual({ status: 'unmatched' });
   });
 
+  it('gives common grocery names an understandable confirmed choice or an honest unmatched result', () => {
+    expect(matchCatalogueItem('bread', 'GBP').status).toBe('ambiguous');
+    expect(matchCatalogueItem('rice', 'GBP').status).toBe('ambiguous');
+    expect(matchCatalogueItem('pasta', 'GBP').status).toBe('ambiguous');
+    expect(matchCatalogueItem('eggs', 'GBP').status).toBe('ambiguous');
+    expect(matchCatalogueItem('vegetables', 'GBP')).toEqual({ status: 'unmatched' });
+    expect(matchCatalogueItem('meat', 'GBP')).toEqual({ status: 'unmatched' });
+  });
+
   // BUG-2 regression: 'unmatched' should no longer be returned for 'milk'
   it('does not return unmatched for ambiguous names', () => {
     const result = matchCatalogueItem('milk', 'GBP');

@@ -3,6 +3,7 @@ import { confirmCatalogueMatch, forceConfirmCatalogueMatch, catalogue } from '..
 import {
   applyRecommendationToItems,
   buildRecommendationCard,
+  calculateBestAvailableSavingMinor,
   describeSavingsAvailability,
   findBudgetSolution,
   generateCandidates,
@@ -80,6 +81,12 @@ describe('recommendation engine', () => {
     const card = buildRecommendationCard(generateCandidates([item], 'GBP')[0], [item], 'GBP', 0)!;
     const evaluated = { candidate: card, proposedItems: [item], savingMinor: card.savingMinor };
     expect(findBudgetSolution([item], 1, [evaluated])).toEqual({ status: 'no-solution-among-evaluated-candidates' });
+  });
+
+  it('calculates the honest remaining shortfall from the best option per grocery', () => {
+    const card = buildRecommendationCard(generateCandidates([item], 'GBP')[0], [item], 'GBP', 0)!;
+    const evaluated = { candidate: card, proposedItems: [item], savingMinor: card.savingMinor };
+    expect(calculateBestAvailableSavingMinor([evaluated])).toBe(card.savingMinor);
   });
 
   // BUG-3 regression: unmatched and needs-confirmation items must not generate candidates

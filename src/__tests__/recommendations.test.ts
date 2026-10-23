@@ -1,12 +1,14 @@
-import { BasketItem } from '../lib/basket';
+import { applyAcceptedBasketChange, BasketItem, calculateBasketTotalMinor, createBasketState } from '../lib/basket';
 import { confirmCatalogueMatch, forceConfirmCatalogueMatch, catalogue } from '../lib/catalogue';
 import {
   applyRecommendationToItems,
   buildRecommendationCard,
+  describeSavingsAvailability,
   findBudgetSolution,
   generateCandidates,
   isCurrentRecommendationRequest,
   revalidateRecommendation,
+  rejectRecommendation,
 } from '../lib/recommendations';
 
 const item: BasketItem = confirmCatalogueMatch(
@@ -48,6 +50,23 @@ describe('recommendation engine', () => {
     const card = buildRecommendationCard(generateCandidates([item], 'GBP')[0], [{ ...item, unitSize: 'old label' }], 'GBP', 0)!;
     const accepted = applyRecommendationToItems(card, [{ ...item, unitSize: 'old label' }])[0];
     expect(accepted).toMatchObject({ name: 'Whole milk', unitSize: '1000 ml', catalogueId: 'milk-whole-1l', confirmedPackageSignature: 'ml:1000', unitPriceMinor: 139 });
+  });
+
+  it('updates totals and accumulated savings when a saving is accepted', () => {
+    const card = buildRecommendationCard(generateCandidates([item], 'GBP')[0], [item], 'GBP', 0)!;
+    const before = calculateBasketTotalMinor([item]);
+    const state = { ...createBasketState('GBP', 1000), items: [item] };
+    const updated = applyAcceptedBasketChange(state, applyRecommendationToItems(card, [item]));
+    expect(before - calculateBasketTotalMinor(updated.items)).toBe(card.savingMinor);
+    expect(updated.accumulatedSavingsMinor).toBe(card.savingMinor);
+  });
+
+  it('keeps the basket unchanged when a recommendation is rejected', () => {
+    const card = buildRecommendationCard(generateCandidates([item], 'GBP')[0], [item], 'GBP', 0)!;
+    const basket = { ...createBasketState('GBP', 1000), items: [item] };
+    const rejected = rejectRecommendation([card], card.id);
+    expect(basket.items).toEqual([item]);
+    expect(rejected[0].status).toBe('rejected');
   });
 
   it('rejects stale revisions and overlapping recommendation responses', () => {
@@ -97,5 +116,31 @@ describe('recommendation engine', () => {
     const overspendItem: BasketItem = { ...item, matchStatus: 'unmatched', catalogueId: undefined, confirmedPackageSignature: undefined, unitPriceMinor: 50000 };
     const result = findBudgetSolution([overspendItem], 100, []);
     expect(result.status).toBe('no-solution-among-evaluated-candidates');
+  });
+
+  it('explains when groceries still need product and package confirmation', () => {
+    const pending = { ...item, matchStatus: 'needs-confirmation' as const, catalogueId: undefined, confirmedPackageSignature: undefined, pendingMatchId: 'milk-semi-1l' };
+    expect(describeSavingsAvailability([pending], 'GBP').kind).toBe('confirm-products');
+  });
+
+  it('explains when an unmatched grocery is still included but cannot get savings ideas', () => {
+    const unmatched = { ...item, matchStatus: 'unmatched' as const, catalogueId: undefined, confirmedPackageSignature: undefined };
+    expect(describeSavingsAvailability([unmatched], 'GBP').kind).toBe('unmatched-items');
+  });
+
+  it('does not suggest reducing or removing essential groceries', () => {
+    const essential = { ...item, priority: 'essential' as const };
+    expect(generateCandidates([essential], 'GBP')).toEqual([]);
+    expect(describeSavingsAvailability([essential], 'GBP').kind).toBe('essential-items-only');
+  });
+
+  it('explains when a confirmed grocery has no cheaper compatible option or reducible quantity', () => {
+    const noSaving = { ...item, quantityHundredths: 100, unitPriceMinor: 100 };
+    expect(generateCandidates([noSaving], 'GBP')).toEqual([]);
+    expect(describeSavingsAvailability([noSaving], 'GBP').kind).toBe('no-compatible-savings');
+  });
+
+  it('reports when confirmed groceries have savings ideas ready', () => {
+    expect(describeSavingsAvailability([item], 'GBP').kind).toBe('suggestions-ready');
   });
 });

@@ -1,3 +1,27 @@
 'use client';
-import {useRouter}from'next/navigation';import {useState}from'react';import {parseMoneyToMinor,SupportedCurrency}from'../lib/basket';import {loadSampleBasket}from'../lib/catalogue';import {useSession}from'./SessionProvider';
-export default function Home(){const router=useRouter();const{dispatch}=useSession();const[currency,setCurrency]=useState<SupportedCurrency>('GBP');const[budget,setBudget]=useState('');const[error,setError]=useState('');const start=(sample=false)=>{try{const amount=parseMoneyToMinor(sample?'35':budget,currency);dispatch({type:'start',currency,budgetMinor:amount,items:sample?loadSampleBasket(currency):[],sample});router.push('/basket')}catch{setError('Please enter a valid budget amount.')}};return <main className="landing"><div className="card"><p className="brand">🧺 BasketBrain</p><h1>Spend with confidence.</h1><p>Build your grocery basket, then review transparent ways to bring it within budget.</p><label>Currency<select value={currency} onChange={e=>setCurrency(e.target.value as SupportedCurrency)}>{['GBP','USD','EUR','NGN'].map(c=><option key={c}>{c}</option>)}</select></label><label>Budget<input value={budget} onChange={e=>setBudget(e.target.value)} placeholder="35.00" inputMode="decimal"/></label>{error&&<p role="alert">{error}</p>}<button onClick={()=>start()}>Start my basket</button><button className="secondary" onClick={()=>start(true)}>Try a sample basket</button></div></main>}
+
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { parseMoneyToMinor, SupportedCurrency } from '../lib/basket';
+import { loadSampleBasket } from '../lib/catalogue';
+import { useSession } from './SessionProvider';
+
+export default function Home() {
+  const router = useRouter();
+  const { dispatch } = useSession();
+  const [currency, setCurrency] = useState<SupportedCurrency>('GBP');
+  const [budget, setBudget] = useState('');
+  const [error, setError] = useState('');
+
+  function start(sample = false) {
+    try {
+      const budgetMinor = parseMoneyToMinor(sample ? '35' : budget, currency);
+      dispatch({ type: 'start', currency, budgetMinor, items: sample ? loadSampleBasket(currency) : [], sample });
+      router.push('/basket');
+    } catch {
+      setError('Enter a budget such as 35.00.');
+    }
+  }
+
+  return <main className="landing"><div className="card"><p className="brand">BasketBrain</p><h1>Keep your grocery shop on budget.</h1><p>Set a budget, add the groceries you buy and the prices you actually paid, then review savings ideas if you go over.</p><p className="notice">Replacement prices are illustrative comparisons, not live store prices.</p><label>Choose a currency<select value={currency} onChange={(event) => setCurrency(event.target.value as SupportedCurrency)}>{['GBP', 'USD', 'EUR', 'NGN'].map((value) => <option key={value}>{value}</option>)}</select></label><label>Your grocery budget<input value={budget} onChange={(event) => setBudget(event.target.value)} placeholder="35.00" inputMode="decimal" /></label>{error && <p role="alert">{error}</p>}<button onClick={() => start()}>Add my groceries</button><button className="secondary" onClick={() => start(true)}>Try a sample grocery basket</button></div></main>;
+}

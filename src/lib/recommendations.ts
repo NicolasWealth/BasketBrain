@@ -44,6 +44,20 @@ export function generateCandidates(items: BasketItem[], currency: SupportedCurre
   });
 }
 
+export type SavingsAvailability = {
+  kind: 'suggestions-ready' | 'confirm-products' | 'unmatched-items' | 'essential-items-only' | 'no-compatible-savings';
+  message: string;
+};
+
+export function describeSavingsAvailability(items: BasketItem[], currency: SupportedCurrency): SavingsAvailability {
+  if (generateCandidates(items, currency).length > 0) return { kind: 'suggestions-ready', message: 'Savings suggestions are ready to review.' };
+  if (items.some((item) => item.matchStatus === 'needs-confirmation')) return { kind: 'confirm-products', message: 'Confirm the product and package size for the groceries marked below so we can check possible savings.' };
+  if (items.some((item) => item.matchStatus === 'unmatched')) return { kind: 'unmatched-items', message: 'Some groceries are included in your total, but we could not identify their product and package size to check savings.' };
+  const confirmed = items.filter((item) => item.matchStatus === 'confirmed');
+  if (confirmed.length > 0 && confirmed.every((item) => item.priority === 'essential')) return { kind: 'essential-items-only', message: 'All confirmed groceries are marked essential, so BasketBrain will not suggest reducing or removing them. Change an item to flexible or optional only if that fits your needs.' };
+  return { kind: 'no-compatible-savings', message: 'We could not find a cheaper illustrative alternative in the same package size, and none of these quantities can be reduced under the current rules. You can review item priorities or your budget.' };
+}
+
 function validText(value?:string){ return !!value && value.length>=1 && value.length<=240 && !/[\d$£€₦]|\b(?:GBP|USD|EUR|NGN)\b/i.test(value); }
 export function buildRecommendationCard(candidate:ServerBuiltCandidate,items:BasketItem[],currency:SupportedCurrency,revision:number,providerText?:ProviderText):Recommendation|null {
   const item=items.find((entry)=>entry.id===candidate.basketItemId); if(!item||!isEligible(item,currency)) return null;
@@ -53,6 +67,10 @@ export function buildRecommendationCard(candidate:ServerBuiltCandidate,items:Bas
   else {if(item.priority!=='optional')return null;next=items.filter((entry)=>entry.id!==item.id);}
   const saving=calculateBasketTotalMinor(items)-calculateBasketTotalMinor(next);if(saving<=0)return null;const text=validText(providerText?.reason)&&validText(providerText?.tradeOffs)?{reason:providerText!.reason!,tradeOffs:providerText!.tradeOffs!}:fallback(candidate);
   return {...candidate,id:candidate.candidateId,proposedName,proposedUnitPriceMinor:price,savingMinor:saving,...text,status:'pending',generatedForRevision:revision,snapshot:{quantityHundredths:item.quantityHundredths,unitPriceMinor:item.unitPriceMinor,currency:item.currency,priority:item.priority,catalogueId:item.catalogueId,unitSize:item.unitSize,confirmedPackageSignature:item.confirmedPackageSignature}};
+}
+
+export function rejectRecommendation(recommendations: Recommendation[], recommendationId: string): Recommendation[] {
+  return recommendations.map((recommendation) => recommendation.id === recommendationId ? { ...recommendation, status: 'rejected' } : recommendation);
 }
 export function revalidateRecommendation(rec:Recommendation,items:BasketItem[],currency:SupportedCurrency){const item=items.find((entry)=>entry.id===rec.basketItemId);if(!item)return 'needs-review' as const;for(const key of ['quantityHundredths','unitPriceMinor','currency','priority','catalogueId','unitSize','confirmedPackageSignature'] as const)if(item[key]!==rec.snapshot[key])return 'needs-review' as const;return buildRecommendationCard(rec,items,currency,rec.generatedForRevision)?'valid' as const:'needs-review' as const;}
 export function findBudgetSolution(items:BasketItem[],budget:number,candidates:EvaluatedCandidate[]):BudgetSearchResult { const total=calculateBasketTotalMinor(items);if(total<=budget)return{status:'already-within-budget'};const grouped=Object.values(candidates.reduce<Record<string,EvaluatedCandidate[]>>((acc,c)=>{(acc[c.candidate.basketItemId]??=[]).push(c);return acc;},{}));const cheapest=grouped.map((group)=>[...group].sort((a,b)=>b.savingMinor-a.savingMinor||a.candidate.candidateId.localeCompare(b.candidate.candidateId))[0]);if(total-cheapest.reduce((sum,c)=>sum+c.savingMinor,0)>budget)return{status:'no-solution-among-evaluated-candidates'};let attempts=0;const ordered=[...candidates].sort((a,b)=>a.candidate.basketItemId.localeCompare(b.candidate.basketItemId)||a.candidate.candidateId.localeCompare(b.candidate.candidateId));for(let size=1;size<=grouped.length;size++){let found:EvaluatedCandidate[]|undefined;const visit=(start:number,plan:EvaluatedCandidate[])=>{if(found||attempts>=MAX_COMBINATIONS)return;if(plan.length===size){attempts++;if(total-plan.reduce((sum,c)=>sum+c.savingMinor,0)<=budget)found=plan;return;}for(let index=start;index<ordered.length;index++){if(plan.some((c)=>c.candidate.basketItemId===ordered[index].candidate.basketItemId))continue;visit(index+1,[...plan,ordered[index]]);}};visit(0,[]);if(found)return{status:'solution-found',solution:found,leastDisruptive:'confirmed'};if(attempts>=MAX_COMBINATIONS)return{status:'search-limit-reached',solution:cheapest,leastDisruptive:'may-not-be-least-disruptive'};}return{status:'search-limit-reached',solution:cheapest,leastDisruptive:'may-not-be-least-disruptive'};}

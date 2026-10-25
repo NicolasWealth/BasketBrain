@@ -15,7 +15,8 @@ export default function Home() {
 
   function start(sample = false) {
     try {
-      const budgetMinor = parseMoneyToMinor(sample ? '35' : budget, currency);
+      const sampleBudgets: Record<SupportedCurrency, string> = { GBP: '11.00', USD: '16.00', EUR: '14.50', NGN: '19000' };
+      const budgetMinor = parseMoneyToMinor(sample ? sampleBudgets[currency] : budget, currency);
       dispatch({ type: 'start', currency, budgetMinor, items: sample ? loadSampleBasket(currency) : [], sample });
       router.push('/basket');
     } catch {

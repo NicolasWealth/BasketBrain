@@ -125,10 +125,13 @@ export function editBasketItemUnitSize(item: BasketItem, unitSize: string | unde
 }
 
 const SAMPLE_ITEMS = [
-  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a001', name: 'Semi skim milk', productId: 'milk-semi-1l', quantityHundredths: 100, unitSize: '1 litre', priority: 'flexible' as const },
-  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a002', name: 'Whole wheat bread', productId: 'bread-wholemeal-800g', quantityHundredths: 100, unitSize: '800 g', priority: 'essential' as const },
-  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a003', name: 'Penne', productId: 'pasta-penne-500g', quantityHundredths: 200, unitSize: '500 g', priority: 'flexible' as const },
-  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a004', name: 'Plantain', quantityHundredths: 100, priority: 'optional' as const, illustrativePrices: { GBP: 150, USD: 199, EUR: 175, NGN: 2400 } },
+  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a001', name: 'Basmati rice', productId: 'rice-basmati-1kg', quantityHundredths: 100, unitSize: '1 kg', priority: 'flexible' as const },
+  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a002', name: 'Free range eggs', productId: 'eggs-free-range-12', quantityHundredths: 100, unitSize: '12 eggs', priority: 'flexible' as const },
+  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a003', name: 'Greek yoghurt', productId: 'yoghurt-greek-500g', quantityHundredths: 100, unitSize: '500 g', priority: 'flexible' as const },
+  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a004', name: 'Wholemeal bread', productId: 'bread-wholemeal-800g', quantityHundredths: 100, unitSize: '800 g', priority: 'essential' as const },
+  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a005', name: 'Whole milk', productId: 'milk-whole-1l', quantityHundredths: 100, unitSize: '1 litre', priority: 'essential' as const },
+  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a006', name: 'Penne pasta', productId: 'pasta-penne-500g', quantityHundredths: 200, unitSize: '500 g', priority: 'flexible' as const },
+  { id: '45c9b9b7-a337-44a8-b5b4-27a0fd72a007', name: 'Plantain', quantityHundredths: 100, priority: 'optional' as const, illustrativePrices: { GBP: 150, USD: 199, EUR: 175, NGN: 240000 } },
 ];
 
 export function loadSampleBasket(currency: SupportedCurrency): BasketItem[] {
@@ -139,6 +142,11 @@ export function loadSampleBasket(currency: SupportedCurrency): BasketItem[] {
     const { productId: _productId, illustrativePrices, ...itemDetails } = sample;
     if (!product && !illustrativePrices) throw new BasketValidationError('Sample item has no illustrative price.');
     const item: BasketItem = { ...itemDetails, unitPriceMinor: product ? product.pricesMinor[currency] : illustrativePrices![currency], currency, matchStatus: 'unmatched' };
-    return applyMatchResult(item, matchCatalogueItem(item.name, currency));
+    // The explicit sample-basket action loads curated demo products with known package identities.
+    // These seeded products are pre-confirmed so the demo reaches savings without repetitive setup;
+    // manually entered products still follow the normal confirmation flow.
+    return product
+      ? { ...item, matchStatus: 'confirmed', catalogueId: product.id, confirmedPackageSignature: product.packageSignature }
+      : applyMatchResult(item, matchCatalogueItem(item.name, currency));
   });
 }

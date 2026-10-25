@@ -76,6 +76,8 @@ export default function BasketPage() {
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [price, setPrice] = useState('');
+  const [unitSize, setUnitSize] = useState('');
+  const [priority, setPriority] = useState<BasketItem['priority']>('flexible');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
   const [searchedCandidateCount, setSearchedCandidateCount] = useState<number | undefined>();
@@ -119,10 +121,12 @@ export default function BasketPage() {
     event.preventDefault();
     setStatus('');
     try {
-      const item = applyMatchResult({ id: crypto.randomUUID(), name: name.trim(), quantityHundredths: parseQuantityToHundredths(quantity), unitPriceMinor: parseMoneyToMinor(price, state.currency), currency: state.currency, priority: 'flexible', matchStatus: 'unmatched' }, matchCatalogueItem(name, state.currency));
+      const item = applyMatchResult({ id: crypto.randomUUID(), name: name.trim(), quantityHundredths: parseQuantityToHundredths(quantity), unitSize: unitSize || undefined, unitPriceMinor: parseMoneyToMinor(price, state.currency), currency: state.currency, priority, matchStatus: 'unmatched' }, matchCatalogueItem(name, state.currency));
       saveManual(addBasketItem(state, item).items);
       setName('');
       setPrice('');
+      setUnitSize('');
+      setPriority('flexible');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Check the grocery details.');
     }
@@ -210,8 +214,15 @@ export default function BasketPage() {
           <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Grocery name" aria-label="Grocery name" />
           <input value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="Quantity" aria-label="Quantity" inputMode="decimal" />
           <input value={price} onChange={(event) => setPrice(event.target.value)} placeholder="Price paid" aria-label="Price paid" inputMode="decimal" />
+          <input value={unitSize} onChange={(event) => setUnitSize(event.target.value)} placeholder="Package label (optional)" aria-label="Package label" />
+          <select value={priority} onChange={(event) => setPriority(event.target.value as BasketItem['priority'])} aria-label="Priority">
+            <option value="essential">Essential</option>
+            <option value="flexible">Flexible</option>
+            <option value="optional">Optional</option>
+          </select>
           <button>Add grocery</button>
         </form>
+        <p>Essential groceries are protected. Flexible groceries may be swapped or reduced; optional groceries may also be removed.</p>
         <ul>
           {state.items.map((item) => {
             const fields = editStates[item.id] ?? editStateFor(item);
@@ -255,7 +266,8 @@ export default function BasketPage() {
       <section className="card">
         {state.recommendations.map((recommendation) => (
           <article key={recommendation.id}>
-            <b>{recommendation.proposedName}</b>
+            <b>{recommendation.type === 'substitution' ? `Switch ${recommendation.currentName} to ${recommendation.proposedName}` : recommendation.type === 'quantity-reduction' ? `Buy less ${recommendation.currentName}` : `Remove ${recommendation.currentName}`}</b>
+            <p>{recommendation.type === 'substitution' ? `Same package: ${catalogue.find((product) => product.id === recommendation.proposedCatalogueId)?.packageSize} ${catalogue.find((product) => product.id === recommendation.proposedCatalogueId)?.packageUnit}.` : recommendation.type === 'quantity-reduction' ? `Quantity: ${recommendation.snapshot.quantityHundredths / 100} to ${(recommendation.proposedQuantityHundredths ?? 0) / 100}.` : 'Quantity: remove this optional grocery.'}</p>
             <p>Save {formatCurrency(recommendation.savingMinor, state.currency)}. {recommendation.reason}</p>
             <p>{recommendation.tradeOffs}</p>
             <p>{recommendationStatus(recommendation.status)}</p>

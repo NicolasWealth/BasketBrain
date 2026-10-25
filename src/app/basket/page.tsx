@@ -226,12 +226,15 @@ export default function BasketPage() {
                   <input value={fields.name} onChange={(event) => updateEdit(item.id, 'name', event.target.value)} placeholder="Grocery name" aria-label={`${item.id}-name`} />
                   <input value={fields.quantity} onChange={(event) => updateEdit(item.id, 'quantity', event.target.value)} placeholder="Quantity" aria-label={`${item.id}-quantity`} inputMode="decimal" />
                   <input value={fields.price} onChange={(event) => updateEdit(item.id, 'price', event.target.value)} placeholder="Price paid" aria-label={`${item.id}-price`} inputMode="decimal" />
-                  <input value={fields.unitSize} onChange={(event) => updateEdit(item.id, 'unitSize', event.target.value)} placeholder="Package label (optional)" aria-label={`${item.id}-package`} />
-                  <select value={fields.priority} onChange={(event) => updateEdit(item.id, 'priority', event.target.value)} aria-label={`${item.id}-priority`}>
-                    <option value="essential">Essential</option>
-                    <option value="flexible">Flexible</option>
-                    <option value="optional">Optional</option>
-                  </select>
+                  <details>
+                    <summary>Package and priority (optional)</summary>
+                    <input value={fields.unitSize} onChange={(event) => updateEdit(item.id, 'unitSize', event.target.value)} placeholder="Package label" aria-label={`${item.id}-package`} />
+                    <select value={fields.priority} onChange={(event) => updateEdit(item.id, 'priority', event.target.value)} aria-label={`${item.id}-priority`}>
+                      <option value="essential">Essential</option>
+                      <option value="flexible">Flexible</option>
+                      <option value="optional">Optional</option>
+                    </select>
+                  </details>
                   <button type="submit">Save item</button>
                   <button type="button" onClick={() => saveManual(state.items.filter((entry) => entry.id !== item.id))}>Remove</button>
                   {editStates[item.id]?.savedAt && Date.now() - editStates[item.id].savedAt! < 3000 && <span aria-live="polite">Saved</span>}

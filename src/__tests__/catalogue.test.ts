@@ -131,8 +131,9 @@ describe('sample basket', () => {
   it.each(SUPPORTED_CURRENCIES)('uses only requested %s prices and leaves matches unconfirmed', (currency) => {
     const items = loadSampleBasket(currency);
     expect(items).toHaveLength(4);
-    expect(items.every((sampleItem) => sampleItem.currency === currency && sampleItem.catalogueId === undefined)).toBe(true);
-    expect(items.filter((sampleItem) => sampleItem.matchStatus === 'needs-confirmation')).toHaveLength(3);
-    expect(items.some((sampleItem) => sampleItem.matchStatus === 'unmatched')).toBe(true);
+    expect(items.every((sampleItem) => sampleItem.currency === currency)).toBe(true);
+    expect(items.filter((sampleItem) => sampleItem.matchStatus === 'confirmed')).toHaveLength(3);
+    expect(items.filter((sampleItem) => sampleItem.catalogueId && sampleItem.confirmedPackageSignature)).toHaveLength(3);
+    expect(items.filter((sampleItem) => sampleItem.matchStatus === 'unmatched')).toHaveLength(1);
   });
 });

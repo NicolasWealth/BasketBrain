@@ -9,6 +9,7 @@ import {
   BasketItem,
   calculateBasketTotalMinor,
   calculateOverspendMinor,
+  calculateRemainingMinor,
   formatCurrency,
   parseMoneyToMinor,
   parseQuantityToHundredths,
@@ -108,7 +109,7 @@ export default function BasketPage() {
     activeRequest.current = '';
     latestRevision.current = updated.basketRevision;
     setLoading(false);
-    dispatch({ type: 'replace', state: updated });
+    dispatch({ type: 'replace', state: updated, recommendations: [] });
   }
 
   function updateEdit(itemId: string, field: keyof ItemEditState, value: string) {
@@ -201,7 +202,8 @@ export default function BasketPage() {
       </header>
       {state.sample && <p className="notice">Sample prices are illustrative, not current store prices.</p>}
       <section className="summary">
-        Budget {formatCurrency(state.budgetMinor, state.currency)} &middot; Total {formatCurrency(total, state.currency)} &middot; {overspend ? `Over by ${formatCurrency(overspend, state.currency)}` : `Within budget; saved ${formatCurrency(state.accumulatedSavingsMinor, state.currency)}`}
+        Budget {formatCurrency(state.budgetMinor, state.currency)} &middot; Basket total {formatCurrency(total, state.currency)} &middot; {overspend ? `Over budget by ${formatCurrency(overspend, state.currency)}` : `Within budget with ${formatCurrency(calculateRemainingMinor(total, state.budgetMinor), state.currency)} left`}
+        {!overspend && state.accumulatedSavingsMinor > 0 && <p>You have saved {formatCurrency(state.accumulatedSavingsMinor, state.currency)} through accepted changes.</p>}
       </section>
       <section className="card">
         <h1>Your grocery basket</h1>
@@ -242,10 +244,11 @@ export default function BasketPage() {
             );
           })}
         </ul>
-        {overspend > 0 && savingsAvailability.kind === 'suggestions-ready' && activeCandidateCount > 0 && <p role="status">You are over budget. Find savings ideas to compare the confirmed groceries in your basket.</p>}
+        {overspend > 0 && savingsAvailability.kind === 'suggestions-ready' && activeCandidateCount > 0 && <p role="status">You are over budget. Compare savings ideas to bring your total down.</p>}
+        {!overspend && activeCandidateCount > 0 && <p role="status">You are within budget. You can still compare cheaper compatible groceries to spend less.</p>}
         {overspend > 0 && savingsAvailability.kind !== 'suggestions-ready' && <p role="status">{savingsAvailability.message}</p>}
         {overspend > 0 && savingsAvailability.kind === 'suggestions-ready' && activeCandidateCount === 0 && <p role="status">You have dismissed the available savings ideas for this basket. Start a new basket to see them again.</p>}
-        {overspend > 0 && <button onClick={recommend} disabled={loading}>{loading ? 'Finding savings ideas' : 'Find ways to save'}</button>}
+        {activeCandidateCount > 0 && <button onClick={recommend} disabled={loading}>{loading ? 'Finding savings ideas' : overspend > 0 ? 'Find ways to save' : 'Check for savings anyway'}</button>}
       </section>
       {status && <p role="status">{status}</p>}
       {budgetSearch.status === 'already-within-budget' && <p role="status">Your basket is within budget.</p>}
@@ -255,7 +258,7 @@ export default function BasketPage() {
       <section className="card">
         {state.recommendations.map((recommendation) => (
           <article key={recommendation.id}>
-            <b>{recommendation.proposedName}</b>
+            <b>{recommendation.currentName === recommendation.proposedName ? recommendation.currentName : `${recommendation.currentName} → ${recommendation.proposedName}`}</b>
             <p>Save {formatCurrency(recommendation.savingMinor, state.currency)}. {recommendation.reason}</p>
             <p>{recommendation.tradeOffs}</p>
             <p>{recommendationStatus(recommendation.status)}</p>

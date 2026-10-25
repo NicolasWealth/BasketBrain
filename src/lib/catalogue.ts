@@ -139,6 +139,11 @@ export function loadSampleBasket(currency: SupportedCurrency): BasketItem[] {
     const { productId: _productId, illustrativePrices, ...itemDetails } = sample;
     if (!product && !illustrativePrices) throw new BasketValidationError('Sample item has no illustrative price.');
     const item: BasketItem = { ...itemDetails, unitPriceMinor: product ? product.pricesMinor[currency] : illustrativePrices![currency], currency, matchStatus: 'unmatched' };
-    return applyMatchResult(item, matchCatalogueItem(item.name, currency));
+    // The explicit sample-basket action loads curated demo products with known package identities.
+    // These seeded products are pre-confirmed so the demo reaches savings without repetitive setup;
+    // manually entered products still follow the normal confirmation flow.
+    return product
+      ? { ...item, matchStatus: 'confirmed', catalogueId: product.id, confirmedPackageSignature: product.packageSignature }
+      : applyMatchResult(item, matchCatalogueItem(item.name, currency));
   });
 }
